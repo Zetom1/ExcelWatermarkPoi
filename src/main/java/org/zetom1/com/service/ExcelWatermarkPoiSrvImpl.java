@@ -4,65 +4,66 @@ import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.zetom1.com.watemark.WatermarkGenerator;
+import org.zetom1.com.watemark.WatermarkGenerator.WatermarkConfig;
 
-import java.io.File;
 import java.io.FileOutputStream;
-import java.io.IOException;
 import java.util.Map;
-import java.util.Set;
 import java.util.TreeMap;
 
 public class ExcelWatermarkPoiSrvImpl {
 
-    public static Integer generateDocument() {
-        try (//Blank workbook
-             XSSFWorkbook workbook = new XSSFWorkbook()) {
-            //Create a blank sheet
+    private static final Logger logger = LoggerFactory.getLogger(ExcelWatermarkPoiSrvImpl.class);
+
+    // Quitamos el 'static' y pasamos el nombre del archivo como parámetro
+    public void generateDocument(String fileName) {
+        // try-with-resources principal
+        try (XSSFWorkbook workbook = new XSSFWorkbook()) {
             XSSFSheet sheet = workbook.createSheet("Employee Data");
 
-            //This data needs to be written (Object[])
-            Map<String, Object[]> data = new TreeMap<String, Object[]>();
-            data.put("1", new Object[] {"ID", "NAME", "LASTNAME"});
-            for (int i=1; i<100; i++) {
-                data.put(String.valueOf(i + 1), new Object[]{i, "Name" + i, "LastName" + i});
-            }
-            //Iterate over data and write to sheet
-            Set<String> keyset = data.keySet();
-            int rownum = 0;
-            for (String key : keyset)
-            {
-                Row row = sheet.createRow(rownum++);
-                Object [] objArr = data.get(key);
-                int cellnum = 1;
-                Cell cell = row.createCell(cellnum++);
-                for (Object obj : objArr)
-                {
-                    cell = row.createCell(cellnum++);
-                    if(obj instanceof String)
-                        cell.setCellValue((String)obj);
-                    else if(obj instanceof Integer)
-                        cell.setCellValue((Integer)obj);
-                }
+            populateSheet(sheet);
+
+            // 1. Configuramos y aplicamos la marca de agua
+            WatermarkConfig config = WatermarkConfig.defaultConfig();
+            WatermarkGenerator.addWatermark(workbook, config);
+
+            // 2. try-with-resources anidado para el FileOutputStream (cierre automático seguro)
+            try (FileOutputStream out = new FileOutputStream(fileName)) {
+                workbook.write(out);
+                logger.info("El archivo {} fue escrito exitosamente en el disco.", fileName);
             }
 
-            try
-            {
-                //Write the workbook in file system
-                FileOutputStream out = new FileOutputStream(new File("WatermarkExample.xlsx"));
-                WatermarkGenerator.addWatermark(workbook);
-                workbook.write(out);
-                out.close();
-                System.out.println("WatermarkExample.xlsx written successfully on disk.");
-            }
-            catch (Exception e)
-            {
-                e.printStackTrace();
-            }
-        } catch (IOException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
+        } catch (Exception e) {
+            logger.error("Error al generar el documento de Excel: ", e);
         }
-        return 2;
+    }
+
+    private void populateSheet(XSSFSheet sheet) {
+        // Usamos el operador diamante <> (Java 7+) y ordenamos por Integer en vez de String
+        Map<Integer, Object[]> data = new TreeMap<>();
+        data.put(1, new Object[] { "ID", "NAME", "LASTNAME" });
+        for (int i = 1; i < 100; i++) {
+            data.put(i + 1, new Object[] { i, "Name" + i, "LastName" + i });
+        }
+
+        int rownum = 0;
+        // Iteramos directamente sobre los valores, ya que no necesitamos la llave (key)
+        for (Object[] objArr : data.values()) {
+            Row row = sheet.createRow(rownum++);
+            int cellnum = 1; 
+            
+            for (Object obj : objArr) {
+                Cell cell = row.createCell(cellnum++);
+                
+                // Pattern Matching para instanceof (Java 16+)
+                if (obj instanceof String strVal) {
+                    cell.setCellValue(strVal);
+                } else if (obj instanceof Integer intVal) {
+                    cell.setCellValue(intVal);
+                }
+            }
+        }
     }
 }
